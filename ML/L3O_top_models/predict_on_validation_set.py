@@ -1,7 +1,13 @@
-#L3O Models
+"""Evaluate the top L3O models against the five-system validation set.
+
+Author: Hemant Sistla
+Created: 2026-08-25
+"""
+
 from joblib import load
 import pandas as pd
 
+# Energetic descriptors produced during structural-model evaluation.
 ENERGY_COLS = [
     'ener', 'ey', 'sf', 'vw', 'el', 'deltaSurf', 'EnerSc',
     'OMM_iPE', 'OMM_fPE',
@@ -9,6 +15,7 @@ ENERGY_COLS = [
     'PMD_HBF', 'PMD_PTF'
 ]
 
+# Per-residue VHL contact descriptors expected by the trained pipelines.
 VHL_CONTACTS = [
     'VAL_62','LEU_63','ARG_64','SER_65','VAL_66','ASN_67','SER_68','ARG_69',
     'GLU_70','PRO_71','SER_72','GLN_73','VAL_74','ILE_75','PHE_76','CAS_77',
@@ -27,13 +34,14 @@ VHL_CONTACTS = [
 
 full_cols = ENERGY_COLS + VHL_CONTACTS
 
-#the following lists contain the ICM-ranks of the native-like models for the corresponding systems
+# ICM ranks of the native-like models for each validation system.
 v9mr9_native_like_models = [229,103,212,268,118,202,117,44,255,150,39,223,280,47,239,36,38,134,217,119,19,95,185,242,234,85,265,91]
 v9d4b_native_like_models = [22,79,83,115,215]
 v8fy0_native_like_models = [25]
 v8fy1_native_like_models = [47,208]
 v9n88_native_like_models = [13]
 
+# Keep this order aligned with both the input dataframes and pdbids below.
 native_like_mdls_master = [v9mr9_native_like_models, v9d4b_native_like_models, v8fy0_native_like_models, v8fy1_native_like_models, v9n88_native_like_models]
 
 df_input1 = pd.read_excel(f'Validation_set/input/9mr9_PROTAC_models_EM_VHL_interactions_consolidated_082226.xlsx', index_col=0)
@@ -58,6 +66,7 @@ for dfind, dfinp in enumerate([df_input1, df_input2, df_input3, df_input4, df_in
         pipeline = load(f"Models/{mdl_}_pipeline.joblib")
         scaler   = load(f"Models/{mdl_}_scaler.joblib")
     
+        # Full models require scaled energy features plus unscaled contacts.
         if "Contacts" not in mdl_:
             X_new = dfinp[full_cols].copy().fillna(0)
             energy_present = [c for c in ENERGY_COLS if c in X_new.columns]
@@ -66,6 +75,7 @@ for dfind, dfinp in enumerate([df_input1, df_input2, df_input3, df_input4, df_in
         else:
             X_new = dfinp[VHL_CONTACTS].copy().fillna(0)
     
+        # Sort by positive-class probability to obtain the ML rank order.
         y_prob = pipeline.predict_proba(X_new)[:, 1]
     
         dfinp[f'{mdl_}_prob'] = y_prob
@@ -77,6 +87,7 @@ for dfind, dfinp in enumerate([df_input1, df_input2, df_input3, df_input4, df_in
     
         mdls_top10 = df_sorted.head(10).i.to_list()
 
+        # Measure how many known native-like models are recovered in the top 10.
         xtal_like_models_in_top10 = list(set(native_like_mdls_master[dfind]).intersection(mdls_top10))
 
         ML_mdl_prfmnc_dict[mdl_].append(len(xtal_like_models_in_top10))
@@ -92,7 +103,8 @@ for dfind, dfinp in enumerate([df_input1, df_input2, df_input3, df_input4, df_in
 metrics = ["#xtal-like model in top10", "ICM Rank(s)", "ML Rank(s)"]
 pdbids = ["9mr9", "9d4b", "8fy0", "8fy1", "9n88"]
 
+# Arrange the three metrics for each PDB system as adjacent output columns.
 df_out = pd.DataFrame.from_dict(ML_mdl_prfmnc_dict, orient='index', columns=[f"{metric}: {pdbid}" for pdbid in pdbids for metric in metrics])
 
-df_out.to_csv("Validation_set/output/test.csv")
-
+df_out.to_csv("Validation_set/output/Validation_set_results.csv")
+print("Results written to Validation_set/output/Validation_set_results.csv")

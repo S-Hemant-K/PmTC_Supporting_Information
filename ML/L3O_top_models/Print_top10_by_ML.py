@@ -1,7 +1,13 @@
-#L3O Models
+"""Rank a user-supplied set of ternary-complex models with the top L3O models.
+
+Author: Hemant Sistla
+Created: 2026-08-25
+"""
+
 from joblib import load
 import pandas as pd
 
+# Energetic descriptors produced during structural-model evaluation.
 ENERGY_COLS = [
     'ener', 'ey', 'sf', 'vw', 'el', 'deltaSurf', 'EnerSc',
     'OMM_iPE', 'OMM_fPE',
@@ -9,6 +15,7 @@ ENERGY_COLS = [
     'PMD_HBF', 'PMD_PTF'
 ]
 
+# Per-residue VHL contact descriptors expected by the trained pipelines.
 VHL_CONTACTS = [
     'VAL_62','LEU_63','ARG_64','SER_65','VAL_66','ASN_67','SER_68','ARG_69',
     'GLU_70','PRO_71','SER_72','GLN_73','VAL_74','ILE_75','PHE_76','CAS_77',
@@ -27,11 +34,13 @@ VHL_CONTACTS = [
 
 full_cols = ENERGY_COLS + VHL_CONTACTS
 
+# These were the two best-performing full-feature models in L3O validation.
 top_models = ["6hay_8bdx_9rkj_LightGBM_Full", "6hay_7znt_8qw6_LightGBM_Full"]
 
 ML_mdl_prfmnc_dict = {x:[] for x in top_models}
 
 usr_inp = input("Enter the path to the input CSV/XLSX file: ")
+# Infer the supported input format from the filename extension.
 dfinp = pd.read_csv(usr_inp) if usr_inp.endswith('.csv') else pd.read_excel(usr_inp)
     
 for mdl_ in top_models:
@@ -39,6 +48,7 @@ for mdl_ in top_models:
     pipeline = load(f"Models/{mdl_}_pipeline.joblib")
     scaler   = load(f"Models/{mdl_}_scaler.joblib")
 
+    # Full models require scaled energy features plus unscaled contact features.
     if "Contacts" not in mdl_:
         X_new = dfinp[full_cols].copy().fillna(0)
         energy_present = [c for c in ENERGY_COLS if c in X_new.columns]
@@ -47,6 +57,7 @@ for mdl_ in top_models:
     else:
         X_new = dfinp[VHL_CONTACTS].copy().fillna(0)
 
+    # The positive-class probability is used as the model-ranking score.
     y_prob = pipeline.predict_proba(X_new)[:, 1]
 
     dfinp[f'{mdl_}_prob'] = y_prob
